@@ -23,7 +23,7 @@ interface GroupedTasks {
   tasks: Task[];
 }
 
-type Mode = "normal" | "create";
+type Mode = "normal" | "create" | "edit";
 
 const App = () => {
   const [groups, setGroups] = useState<GroupedTasks[]>([]);
@@ -34,6 +34,10 @@ const App = () => {
   const [createTitle, setCreateTitle] = useState("");
   const [createNotes, setCreateNotes] = useState("");
   const [createFocus, setCreateFocus] = useState<"title" | "notes">("title");
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editFocus, setEditFocus] = useState<"title" | "notes">("title");
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   const currentList = groups[activeListIndex];
   const currentTasks = currentList?.tasks ?? [];
@@ -135,6 +139,41 @@ const App = () => {
     }
   };
 
+  const handleEditStart = () => {
+    if (!selectedTask) return;
+    setEditingTaskId(selectedTask.id);
+    setEditTitle(selectedTask.title);
+    setEditNotes(selectedTask.notes || "");
+    setEditFocus("title");
+    setMode("edit");
+  };
+
+  const handleEdit = async () => {
+    if (!editingTaskId || !currentList || !editTitle.trim()) return;
+    const listId = currentList.listId;
+
+    setGroups(groups.map(g => {
+      if (g.listId !== listId) return g;
+      return {
+        ...g,
+        tasks: g.tasks.map(t => t.id === editingTaskId ? { ...t, title: editTitle.trim(), notes: editNotes.trim() || undefined } : t)
+      };
+    }));
+    setMode("normal");
+    setMessage("Tarea actualizada");
+    setEditingTaskId(null);
+    setEditTitle("");
+    setEditNotes("");
+
+    try {
+      await service.createTask(listId, editTitle.trim(), editNotes.trim() || undefined);
+      refreshTasks();
+    } catch {
+      setMessage("Error al actualizar");
+      refreshTasks();
+    }
+  };
+
   useInput((input, key) => {
     if (mode === "create") {
       if (key.escape) {
@@ -182,6 +221,53 @@ const App = () => {
       return;
     }
 
+    if (mode === "edit") {
+      if (key.escape) {
+        setMode("normal");
+        setEditingTaskId(null);
+        setEditTitle("");
+        setEditNotes("");
+        return;
+      }
+
+      if (key.tab) {
+        setEditFocus((f) => (f === "title" ? "notes" : "title"));
+        return;
+      }
+
+      if (key.return) {
+        if (editFocus === "notes") {
+          handleEdit();
+          return;
+        }
+        setEditFocus("notes");
+        return;
+      }
+
+      if (key.backspace) {
+        if (editFocus === "title") {
+          setEditTitle((t) => t.slice(0, -1));
+        } else {
+          setEditNotes((n) => n.slice(0, -1));
+        }
+        return;
+      }
+
+      if (key.upArrow || key.downArrow) {
+        setEditFocus((f) => (f === "title" ? "notes" : "title"));
+        return;
+      }
+
+      if (input) {
+        if (editFocus === "title") {
+          setEditTitle((t) => t + input);
+        } else {
+          setEditNotes((n) => n + input);
+        }
+      }
+      return;
+    }
+
     if (key.tab) {
       setActiveListIndex((i) => (i + 1) % groups.length);
       setActiveTaskIndex(0);
@@ -221,11 +307,14 @@ const App = () => {
       case "d":
         handleDelete();
         break;
-      case "c":
+      case "a":
         setCreateTitle("");
         setCreateNotes("");
         setCreateFocus("title");
         setMode("create");
+        break;
+      case "e":
+        handleEditStart();
         break;
       case "r":
         refreshTasks();
@@ -247,7 +336,7 @@ const App = () => {
     <Box flexDirection="column" height={process.stdout.rows - 2}>
       <Box borderStyle="bold" borderColor="cyan" flexDirection="column" padding={1}>
         <Text bold>📋 Tasks</Text>
-        <Text dimColor>  Tab: listas • j/k: tareas • Enter: complete • d: delete • r: refresh • c: create • q: quit</Text>
+        <Text dimColor>  Tab: listas • j/k: tareas • Enter: complete • d: delete • e: edit • a: create • r: refresh • q: quit</Text>
       </Box>
 
       <Box flexDirection="row" marginY={0}>
@@ -298,6 +387,27 @@ const App = () => {
             <Text color={createFocus === "notes" ? "green" : "white"}>
               {createFocus === "notes" ? "▸" : " "} Notas: {createNotes || "(opcional)"}
               {createFocus === "notes" ? "▌" : ""}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Enter: siguiente campo / confirmar • Tab: cambiar campo • Esc: cancelar</Text>
+          </Box>
+        </Box>
+      )}
+
+      {mode === "edit" && (
+        <Box flexDirection="column" borderStyle="bold" borderColor="yellow" padding={1} marginTop={1}>
+          <Text bold color="yellow">Editar tarea</Text>
+          <Box marginTop={1}>
+            <Text color={editFocus === "title" ? "yellow" : "white"}>
+              {editFocus === "title" ? "▸" : " "} Título: {editTitle}
+              {editFocus === "title" ? "▌" : ""}
+            </Text>
+          </Box>
+          <Box>
+            <Text color={editFocus === "notes" ? "yellow" : "white"}>
+              {editFocus === "notes" ? "▸" : " "} Notas: {editNotes || "(opcional)"}
+              {editFocus === "notes" ? "▌" : ""}
             </Text>
           </Box>
           <Box marginTop={1}>

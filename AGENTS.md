@@ -31,7 +31,8 @@ Controles:
 - `g/G` - ir al inicio/fin
 - `Enter` - completar tarea
 - `d` - eliminar tarea
-- `c` - crear tarea (modal interactivo)
+- `e` - editar tarea
+- `a` - crear tarea (modal interactivo)
 - `r` - refresh
 - `q` - salir
 
