@@ -42,7 +42,34 @@ async function main() {
           console.log(`\n# ${group.listTitle}`);
           for (const task of group.tasks) {
             console.log(`  - ${task.title}`);
+            if (task.notes) {
+              console.log(`    📝 ${task.notes}`);
+            }
+            if (task.due) {
+              console.log(`    📅 ${new Date(task.due).toLocaleDateString()}`);
+            }
           }
+        }
+        break;
+      }
+      case "show": {
+        const listName = args[1];
+        const taskTitle = args[2];
+        if (!listName || !taskTitle) {
+          console.error('Usage: task show "<list>" "<task>"');
+          process.exit(1);
+        }
+        const taskId = await findTaskByTitle(listName, taskTitle);
+        const listId = await findListByName(listName);
+        const grouped = await service.getAllTasks();
+        const group = grouped.find((g) => g.listId === listId);
+        const task = group?.tasks.find((t) => t.id === taskId);
+        if (task) {
+          console.log(`Título: ${task.title}`);
+          console.log(`Estado: ${task.status}`);
+          if (task.notes) console.log(`Notas: ${task.notes}`);
+          if (task.due) console.log(`Vencimiento: ${new Date(task.due).toLocaleString()}`);
+          if (task.completed) console.log(`Completada: ${new Date(task.completed).toLocaleString()}`);
         }
         break;
       }
@@ -95,8 +122,9 @@ async function main() {
       default:
         console.log(`Usage: task <command>
 Commands:
-  list                       List all pending tasks grouped by list
+  list                       List all pending tasks with details
   lists                      List all task lists
+  show "<list>" "<task>"      Show task details
   complete "<list>" "<task>"   Mark a task as complete
   create "<list>" "<title>" [notes]  Create a new task
   delete "<list>" "<task>"    Delete a task
@@ -104,9 +132,7 @@ Commands:
 Examples:
   task lists
   task list
-  task complete "Trabajo" "Reunión con cliente"
-  task create "Personal" "Comprar leche" "notas opcionales"
-  task delete "Personal" "Comprar leche"`);
+  task create "Personal" "Comprar leche" "notas"`);
     }
   } catch (err) {
     console.error("Error:", err instanceof Error ? err.message : err);
