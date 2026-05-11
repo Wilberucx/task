@@ -14,6 +14,7 @@ interface RawTask {
   notes?: string;
   due?: string;
   completed?: string;
+  parent?: string;
 }
 
 interface GwsListsResponse {
@@ -83,6 +84,32 @@ export class GwsTaskRepository implements TaskRepository {
 
     if (!raw || !raw.id) {
       throw new Error("Failed to create task");
+    }
+
+    return { id: raw.id, title: raw.title, status: raw.status, notes: raw.notes, taskListId };
+  }
+
+  async update(
+    taskListId: string,
+    taskId: string,
+    title: string,
+    notes?: string,
+  ): Promise<Task> {
+    const body: Record<string, string> = { title };
+    if (notes !== undefined) body.notes = notes;
+
+    const raw = await this.runner.run<RawTask>([
+      "tasks",
+      "tasks",
+      "patch",
+      "--params",
+      JSON.stringify({ tasklist: taskListId, task: taskId }),
+      "--json",
+      JSON.stringify(body),
+    ]);
+
+    if (!raw || !raw.id) {
+      throw new Error("Failed to update task");
     }
 
     return { id: raw.id, title: raw.title, status: raw.status, notes: raw.notes, taskListId };

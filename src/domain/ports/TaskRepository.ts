@@ -5,5 +5,6 @@ export interface TaskRepository {
   getTasks(taskListId: string): Promise<Task[]>;
   complete(taskListId: string, taskId: string): Promise<void>;
   create(taskListId: string, title: string, notes?: string): Promise<Task>;
+  update(taskListId: string, taskId: string, title: string, notes?: string): Promise<Task>;
   delete(taskListId: string, taskId: string): Promise<void>;
 }

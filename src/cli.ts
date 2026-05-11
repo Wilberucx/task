@@ -5,6 +5,13 @@ import { TaskService } from "./application/TaskService.js";
 const repo = new GwsTaskRepository();
 const service = new TaskService(repo);
 
+const TASK_ASCII = `███████╗ █████╗ ███████╗██╗  ██╗
+╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
+   ██║   ███████║███████╗█████╔╝ 
+   ██║   ██╔══██║╚════██║██╔═██╗ 
+   ██║   ██║  ██║███████║██║  ██╗
+   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝`;
+
 async function findListByName(name: string): Promise<string> {
   const lists = await service.getAllLists();
   const normalized = name.toLowerCase();
@@ -56,7 +63,7 @@ async function main() {
         const listName = args[1];
         const taskTitle = args[2];
         if (!listName || !taskTitle) {
-          console.error('Usage: task show "<list>" "<task>"');
+          console.error(`Usage: ${TASK_ASCII} show "<list>" "<task>"`);
           process.exit(1);
         }
         const taskId = await findTaskByTitle(listName, taskTitle);
@@ -84,7 +91,7 @@ async function main() {
         const listName = args[1];
         const taskTitle = args[2];
         if (!listName || !taskTitle) {
-          console.error('Usage: task complete "<list>" "<task>"');
+          console.error(`Usage: ${TASK_ASCII} complete "<list>" "<task>"`);
           process.exit(1);
         }
         const taskId = await findTaskByTitle(listName, taskTitle);
@@ -98,7 +105,7 @@ async function main() {
         const title = args[2];
         const notes = args[3];
         if (!listName || !title) {
-          console.error('Usage: task create "<list>" "<title>" [notes]');
+          console.error(`Usage: ${TASK_ASCII} create "<list>" "<title>" [notes]`);
           process.exit(1);
         }
         const listId = await findListByName(listName);
@@ -110,7 +117,7 @@ async function main() {
         const listName = args[1];
         const taskTitle = args[2];
         if (!listName || !taskTitle) {
-          console.error('Usage: task delete "<list>" "<task>"');
+          console.error(`Usage: ${TASK_ASCII} delete "<list>" "<task>"`);
           process.exit(1);
         }
         const taskId = await findTaskByTitle(listName, taskTitle);
@@ -120,7 +127,7 @@ async function main() {
         break;
       }
       default:
-        console.log(`Usage: task <command>
+        console.log(`Usage: ${TASK_ASCII} <command>
 Commands:
   list                       List all pending tasks with details
   lists                      List all task lists
@@ -130,9 +137,9 @@ Commands:
   delete "<list>" "<task>"    Delete a task
 
 Examples:
-  task lists
-  task list
-  task create "Personal" "Comprar leche" "notas"`);
+  ${TASK_ASCII} lists
+  ${TASK_ASCII} list
+  ${TASK_ASCII} create "Personal" "Comprar leche" "notas"`);
     }
   } catch (err) {
     console.error("Error:", err instanceof Error ? err.message : err);

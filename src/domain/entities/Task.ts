@@ -8,4 +8,5 @@ export interface Task {
   due?: string;
   completed?: string;
   taskListId: string;
+  parent?: string;
 }

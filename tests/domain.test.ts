@@ -92,4 +92,141 @@ describe("TaskService", () => {
       expect(mockRepo.delete).toHaveBeenCalledWith("list1", "task1");
     });
   });
+
+  describe("cache behavior", () => {
+    const mockGroups = [
+      { listId: "l1", listTitle: "Work", tasks: [{ id: "t1", title: "Task", status: "needsAction" as const, taskListId: "l1", children: [] }] },
+    ];
+
+    beforeEach(() => {
+      mockRepo.getLists = vi.fn().mockResolvedValue([{ id: "l1", title: "Work" }]);
+      mockRepo.getTasks = vi.fn().mockResolvedValue([{ id: "t1", title: "Task", status: "needsAction", taskListId: "l1" }]);
+    });
+
+    it("returns cached data within TTL without calling the repo", async () => {
+      const result1 = await service.getAllTasks();
+      expect(result1).toEqual(mockGroups);
+
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      const result2 = await service.getAllTasks();
+      expect(result2).toEqual(mockGroups);
+      expect(mockRepo.getLists).not.toHaveBeenCalled();
+      expect(mockRepo.getTasks).not.toHaveBeenCalled();
+    });
+
+    it("re-fetches when cache is stale (past TTL)", async () => {
+      vi.useFakeTimers();
+      await service.getAllTasks();
+
+      vi.advanceTimersByTime(30_001);
+
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.getAllTasks();
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it("re-fetches when forceRefresh is true regardless of TTL", async () => {
+      await service.getAllTasks();
+
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.getAllTasks(true);
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+    });
+
+    it("invalidates cache after completeTask()", async () => {
+      mockRepo.complete = vi.fn().mockResolvedValue(undefined);
+
+      await service.getAllTasks();
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.completeTask("l1", "t1");
+      await service.getAllTasks();
+
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+    });
+
+    it("invalidates cache after createTask()", async () => {
+      mockRepo.create = vi.fn().mockResolvedValue({ id: "t2", title: "New", status: "needsAction", taskListId: "l1" });
+
+      await service.getAllTasks();
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.createTask("l1", "New");
+      await service.getAllTasks();
+
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+    });
+
+    it("invalidates cache after updateTask()", async () => {
+      mockRepo.update = vi.fn().mockResolvedValue({ id: "t1", title: "Updated", status: "needsAction", taskListId: "l1" });
+
+      await service.getAllTasks();
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.updateTask("l1", "t1", "Updated");
+      await service.getAllTasks();
+
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+    });
+
+    it("invalidates cache after deleteTask()", async () => {
+      mockRepo.delete = vi.fn().mockResolvedValue(undefined);
+
+      await service.getAllTasks();
+      mockRepo.getLists.mockClear();
+      mockRepo.getTasks.mockClear();
+
+      await service.deleteTask("l1", "t1");
+      await service.getAllTasks();
+
+      expect(mockRepo.getLists).toHaveBeenCalled();
+      expect(mockRepo.getTasks).toHaveBeenCalled();
+    });
+  });
+
+  describe("updateTask", () => {
+    it("delegates title and notes to the repository", async () => {
+      const mockTask = { id: "t1", title: "Updated", status: "needsAction", notes: "notes", taskListId: "l1" };
+      mockRepo.update = vi.fn().mockResolvedValue(mockTask);
+
+      const result = await service.updateTask("l1", "t1", "Updated", "notes");
+
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "notes");
+      expect(result).toEqual(mockTask);
+    });
+
+    it("delegates only title when notes is undefined", async () => {
+      const mockTask = { id: "t1", title: "Updated", status: "needsAction", taskListId: "l1" };
+      mockRepo.update = vi.fn().mockResolvedValue(mockTask);
+
+      await service.updateTask("l1", "t1", "Updated");
+
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", undefined);
+    });
+
+    it("passes empty string notes to repository", async () => {
+      const mockTask = { id: "t1", title: "Updated", status: "needsAction", taskListId: "l1" };
+      mockRepo.update = vi.fn().mockResolvedValue(mockTask);
+
+      await service.updateTask("l1", "t1", "Updated", "");
+
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "");
+    });
+  });
 });

@@ -1,11 +1,24 @@
 #!/usr/bin/env node
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { render, Box, Text, useInput } from "ink";
 import { GwsTaskRepository } from "./infrastructure/gws/GwsTaskRepository.js";
 import { TaskService } from "./application/TaskService.js";
+import type { GroupedTasks } from "./application/TaskService.js";
 
 const repo = new GwsTaskRepository();
 const service = new TaskService(repo);
+
+interface TaskNode {
+  id: string;
+  title: string;
+  status: "needsAction" | "completed";
+  notes?: string;
+  due?: string;
+  completed?: string;
+  taskListId: string;
+  parent?: string;
+  children: TaskNode[];
+}
 
 interface Task {
   id: string;
@@ -15,15 +28,30 @@ interface Task {
   due?: string;
   completed?: string;
   taskListId: string;
-}
-
-interface GroupedTasks {
-  listId: string;
-  listTitle: string;
-  tasks: Task[];
+  parent?: string;
 }
 
 type Mode = "normal" | "create" | "edit";
+
+function collectIdsWithChildren(nodes: TaskNode[]): string[] {
+  const ids: string[] = [];
+  for (const node of nodes) {
+    if (node.children.length > 0) ids.push(node.id);
+    ids.push(...collectIdsWithChildren(node.children));
+  }
+  return ids;
+}
+
+function flattenVisible(nodes: TaskNode[], collapsed: Set<string>): TaskNode[] {
+  const result: TaskNode[] = [];
+  for (const node of nodes) {
+    result.push(node);
+    if (!collapsed.has(node.id)) {
+      result.push(...flattenVisible(node.children, collapsed));
+    }
+  }
+  return result;
+}
 
 const App = () => {
   const [groups, setGroups] = useState<GroupedTasks[]>([]);
@@ -38,14 +66,29 @@ const App = () => {
   const [editNotes, setEditNotes] = useState("");
   const [editFocus, setEditFocus] = useState<"title" | "notes">("title");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const currentList = groups[activeListIndex];
   const currentTasks = currentList?.tasks ?? [];
-  const selectedTask = currentTasks[activeTaskIndex];
+
+  const visibleTasks = useMemo(() => flattenVisible(currentTasks, collapsed), [currentTasks, collapsed]);
+
+  const selectedTask = visibleTasks[activeTaskIndex];
+
+  const initCollapsed = (nodes: TaskNode[]) => {
+    const ids = collectIdsWithChildren(nodes);
+    setCollapsed(new Set(ids));
+  };
 
   useEffect(() => {
     refreshTasks();
   }, []);
+
+  useEffect(() => {
+    if (currentTasks.length > 0) {
+      initCollapsed(currentTasks);
+    }
+  }, [activeListIndex]);
 
   const refreshTasks = async () => {
     try {
@@ -54,6 +97,9 @@ const App = () => {
       if (activeListIndex >= g.length) {
         setActiveListIndex(0);
         setActiveTaskIndex(0);
+      }
+      if (g[activeListIndex]) {
+        initCollapsed(g[activeListIndex].tasks);
       }
     } catch (e) {
       setMessage(`Error: ${e instanceof Error ? e.message : e}`);
@@ -109,12 +155,13 @@ const App = () => {
     if (!createTitle.trim() || !currentList) return;
     const listId = currentList.listId;
     const tempId = `temp-${Date.now()}`;
-    const tempTask: Task = {
+    const tempTask: TaskNode = {
       id: tempId,
       title: createTitle.trim(),
       status: "needsAction",
       notes: createNotes.trim() || undefined,
-      taskListId: listId
+      taskListId: listId,
+      children: []
     };
 
     setGroups(groups.map((g, i) => {
@@ -282,12 +329,12 @@ const App = () => {
 
     switch (input) {
       case "j":
-        if (currentTasks.length > 0) {
-          setActiveTaskIndex((i) => Math.min(i + 1, currentTasks.length - 1));
+        if (visibleTasks.length > 0) {
+          setActiveTaskIndex((i) => Math.min(i + 1, visibleTasks.length - 1));
         }
         break;
       case "k":
-        if (currentTasks.length > 0) {
+        if (visibleTasks.length > 0) {
           setActiveTaskIndex((i) => Math.max(i - 1, 0));
         }
         break;
@@ -295,8 +342,26 @@ const App = () => {
         setActiveTaskIndex(0);
         break;
       case "G":
-        setActiveTaskIndex(Math.max(0, currentTasks.length - 1));
+        setActiveTaskIndex(Math.max(0, visibleTasks.length - 1));
         break;
+    }
+
+    if (input === "l" && selectedTask && selectedTask.children.length > 0) {
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedTask.id);
+        return next;
+      });
+      return;
+    }
+
+    if (input === "h" && selectedTask && selectedTask.children.length > 0) {
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        next.add(selectedTask.id);
+        return next;
+      });
+      return;
     }
 
     if (key.return && selectedTask) {
@@ -335,8 +400,15 @@ const App = () => {
   return (
     <Box flexDirection="column" height={process.stdout.rows - 2}>
       <Box borderStyle="bold" borderColor="cyan" flexDirection="column" padding={1}>
-        <Text bold>📋 Tasks</Text>
-        <Text dimColor>  Tab: listas • j/k: tareas • Enter: complete • d: delete • e: edit • a: create • r: refresh • q: quit</Text>
+        <Box flexDirection="column">
+          <Text bold color="green">████████╗ █████╗ ███████╗██╗  ██╗</Text>
+          <Text bold color="green">╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝</Text>
+          <Text bold color="green">   ██║   ███████║███████╗█████╔╝</Text>
+          <Text bold color="green">   ██║   ██╔══██║╚════██║██╔═██╗</Text>
+          <Text bold color="green">   ██║   ██║  ██║███████║██║  ██╗</Text>
+          <Text bold color="green">   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</Text>
+        </Box>
+        <Text dimColor>  Tab: listas • j/k: tareas • l: expand • h: collapse • Enter: complete • d: delete • e: edit • a: create • r: refresh • q: quit</Text>
       </Box>
 
       <Box flexDirection="row" marginY={0}>
@@ -351,18 +423,25 @@ const App = () => {
       </Box>
 
       <Box flexDirection="column" overflow="hidden">
-        {currentTasks.length === 0 ? (
+        {visibleTasks.length === 0 ? (
           <Text dimColor>No hay tareas en esta lista</Text>
         ) : (
-          currentTasks.map((task, idx) => (
-            <Box key={task.id}>
-              <Text color={idx === activeTaskIndex ? "green" : "white"} bold={idx === activeTaskIndex}>
-                {idx === activeTaskIndex ? "▶ " : "  "}
-                {task.title}
-              </Text>
-              {task.due && <Text dimColor> 📅{new Date(task.due).toLocaleDateString()}</Text>}
-            </Box>
-          ))
+          visibleTasks.map((task, idx) => {
+            const isCollapsed = collapsed.has(task.id);
+            const hasChildren = task.children.length > 0;
+            const isChild = !!task.parent;
+            return (
+              <Box key={task.id}>
+                <Text color={idx === activeTaskIndex ? "green" : "white"} bold={idx === activeTaskIndex}>
+                  {idx === activeTaskIndex ? "▶ " : "  "}
+                  {isChild ? "  " : ""}
+                  {task.title}
+                  {hasChildren && (isCollapsed ? " ▸" : " ▾")}
+                </Text>
+                {task.due && <Text dimColor> 📅{new Date(task.due).toLocaleDateString()}</Text>}
+              </Box>
+            );
+          })
         )}
       </Box>
 
@@ -428,7 +507,7 @@ const App = () => {
             <Text color="cyan">Creando tarea..._</Text>
           ) : (
             <Text>
-              [{activeListIndex + 1}/{groups.length}] {currentTasks.length > 0 ? `[${activeTaskIndex + 1}/${currentTasks.length}]` : ""}
+              {`[${activeListIndex + 1}/${groups.length}] ${visibleTasks.length > 0 ? `[${activeTaskIndex + 1}/${visibleTasks.length}]` : ""}`}
             </Text>
           )}
         </Text>

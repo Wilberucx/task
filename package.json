@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "ink": "^7.0.2",
+    "ink-text-input": "^6.0.0",
     "react": "^19.2.6",
     "yargs": "^17.7.2"
   },
