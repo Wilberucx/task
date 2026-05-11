@@ -8,6 +8,13 @@ CLI y TUI para gestionar Google Tasks via `gws` CLI.
 npm run build
 ```
 
+## Tests
+
+```bash
+npm run test      # watch mode
+npm run test:run  # single run
+```
+
 ## CLI
 
 ```bash
