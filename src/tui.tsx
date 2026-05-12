@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import React, { useState, useEffect, useMemo } from "react";
-import { render, Box, Text, useInput } from "ink";
+import { render, Box, Text, useInput, useStdout } from "ink";
 import { GwsTaskRepository } from "./infrastructure/gws/GwsTaskRepository.js";
 import { TaskService } from "./application/TaskService.js";
 import type { GroupedTasks } from "./application/TaskService.js";
@@ -53,6 +53,11 @@ function flattenVisible(nodes: TaskNode[], collapsed: Set<string>): TaskNode[] {
   return result;
 }
 
+function truncate(text: string, maxWidth: number): string {
+  if (text.length <= maxWidth) return text;
+  return text.slice(0, maxWidth - 1) + "…";
+}
+
 const App = () => {
   const [groups, setGroups] = useState<GroupedTasks[]>([]);
   const [activeListIndex, setActiveListIndex] = useState(0);
@@ -67,6 +72,16 @@ const App = () => {
   const [editFocus, setEditFocus] = useState<"title" | "notes">("title");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const { stdout } = useStdout();
+  const [cols, setCols] = useState(stdout.columns);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCols(stdout.columns);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [stdout]);
 
   const currentList = groups[activeListIndex];
   const currentTasks = currentList?.tasks ?? [];
@@ -430,12 +445,13 @@ const App = () => {
             const isCollapsed = collapsed.has(task.id);
             const hasChildren = task.children.length > 0;
             const isChild = !!task.parent;
+            const titleMaxWidth = cols - 6;
             return (
               <Box key={task.id}>
                 <Text color={idx === activeTaskIndex ? "green" : "white"} bold={idx === activeTaskIndex}>
                   {idx === activeTaskIndex ? "▶ " : "  "}
                   {isChild ? "  " : ""}
-                  {task.title}
+                  {truncate(task.title, titleMaxWidth)}
                   {hasChildren && (isCollapsed ? " ▸" : " ▾")}
                 </Text>
                 {task.due && <Text dimColor> 📅{new Date(task.due).toLocaleDateString()}</Text>}
