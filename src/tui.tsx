@@ -31,7 +31,7 @@ interface Task {
   parent?: string;
 }
 
-type Mode = "normal" | "create" | "edit";
+type Mode = "normal" | "create" | "edit" | "detail";
 
 function collectIdsWithChildren(nodes: TaskNode[]): string[] {
   const ids: string[] = [];
@@ -58,6 +58,20 @@ function truncate(text: string, maxWidth: number): string {
   return text.slice(0, maxWidth - 1) + "…";
 }
 
+const HEADER_ROWS = { large: 8, medium: 3, small: 2, tiny: 0 };
+const TABS_ROWS = 1;
+const STATUS_ROWS = 1;
+const DETAIL_ROWS = 8;
+
+type Breakpoint = "large" | "medium" | "small" | "tiny";
+
+function getBreakpoint(cols: number): Breakpoint {
+  if (cols >= 120) return "large";
+  if (cols >= 80) return "medium";
+  if (cols >= 50) return "small";
+  return "tiny";
+}
+
 const App = () => {
   const [groups, setGroups] = useState<GroupedTasks[]>([]);
   const [activeListIndex, setActiveListIndex] = useState(0);
@@ -75,13 +89,29 @@ const App = () => {
 
   const { stdout } = useStdout();
   const [cols, setCols] = useState(stdout.columns);
+  const [rows, setRows] = useState(stdout.rows);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCols(stdout.columns);
-    }, 500);
-    return () => clearInterval(interval);
+    let shouldUpdate = true;
+    const handler = () => {
+      if (shouldUpdate) {
+        setCols(stdout.columns);
+        setRows(stdout.rows);
+      }
+    };
+    stdout.on("resize", handler);
+    return () => {
+      shouldUpdate = false;
+      stdout.off("resize", handler);
+    };
   }, [stdout]);
+
+  const breakpoint = getBreakpoint(cols);
+  const headerH = HEADER_ROWS[breakpoint];
+  const listH =
+    breakpoint === "small" || breakpoint === "tiny"
+      ? rows - headerH - TABS_ROWS - STATUS_ROWS
+      : rows - headerH - TABS_ROWS - DETAIL_ROWS - STATUS_ROWS;
 
   const currentList = groups[activeListIndex];
   const currentTasks = currentList?.tasks ?? [];
@@ -330,6 +360,14 @@ const App = () => {
       return;
     }
 
+    if (mode === "detail") {
+      if (key.escape) {
+        setMode("normal");
+        return;
+      }
+      return;
+    }
+
     if (key.tab) {
       setActiveListIndex((i) => (i + 1) % groups.length);
       setActiveTaskIndex(0);
@@ -379,8 +417,14 @@ const App = () => {
       return;
     }
 
-    if (key.return && selectedTask) {
+    if (input === " " && selectedTask) {
       handleComplete();
+      return;
+    }
+
+    if (key.return && selectedTask) {
+      setMode("detail");
+      return;
     }
 
     switch (input) {
@@ -413,18 +457,22 @@ const App = () => {
   });
 
   return (
-    <Box flexDirection="column" height={process.stdout.rows - 2}>
-      <Box borderStyle="bold" borderColor="cyan" flexDirection="column" padding={1}>
-        <Box flexDirection="column">
-          <Text bold color="green">████████╗ █████╗ ███████╗██╗  ██╗</Text>
-          <Text bold color="green">╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝</Text>
-          <Text bold color="green">   ██║   ███████║███████╗█████╔╝</Text>
-          <Text bold color="green">   ██║   ██╔══██║╚════██║██╔═██╗</Text>
-          <Text bold color="green">   ██║   ██║  ██║███████║██║  ██╗</Text>
-          <Text bold color="green">   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</Text>
+    <Box flexDirection="column" height={rows - 2}>
+      {breakpoint !== "tiny" && (
+        <Box borderStyle="bold" borderColor="cyan" flexDirection="column" padding={1} height={breakpoint === "large" ? 8 : breakpoint === "medium" ? 3 : 2}>
+          {breakpoint === "large" && (
+            <Box flexDirection="column">
+              <Text bold color="green">████████╗ █████╗ ███████╗██╗  ██╗</Text>
+              <Text bold color="green">╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝</Text>
+              <Text bold color="green">   ██║   ███████║███████╗█████╔╝</Text>
+              <Text bold color="green">   ██║   ██╔══██║╚════██║██╔═██╗</Text>
+              <Text bold color="green">   ██║   ██║  ██║███████║██║  ██╗</Text>
+              <Text bold color="green">   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</Text>
+            </Box>
+          )}
+          <Text dimColor>  Tab: listas • j/k: tareas • l: expand • h: collapse • spc:done • ret:detail • d: delete • e: edit • a: create • r: refresh • q: quit</Text>
         </Box>
-        <Text dimColor>  Tab: listas • j/k: tareas • l: expand • h: collapse • Enter: complete • d: delete • e: edit • a: create • r: refresh • q: quit</Text>
-      </Box>
+      )}
 
       <Box flexDirection="row" marginY={0}>
         {groups.map((group, idx) => (
@@ -437,11 +485,11 @@ const App = () => {
         ))}
       </Box>
 
-      <Box flexDirection="column" overflow="hidden">
+      <Box flexDirection="column" overflow="hidden" height={listH}>
         {visibleTasks.length === 0 ? (
           <Text dimColor>No hay tareas en esta lista</Text>
         ) : (
-          visibleTasks.map((task, idx) => {
+          visibleTasks.map((task: TaskNode, idx: number) => {
             const isCollapsed = collapsed.has(task.id);
             const hasChildren = task.children.length > 0;
             const isChild = !!task.parent;
@@ -461,11 +509,20 @@ const App = () => {
         )}
       </Box>
 
-      {selectedTask && (selectedTask.notes || selectedTask.due) && (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" padding={1} marginTop={1}>
+      {mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "small" && breakpoint !== "tiny" && (
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" padding={1} marginTop={1} height={DETAIL_ROWS} overflow="hidden">
           <Text bold>Detalles:</Text>
           {selectedTask.notes && <Text>{selectedTask.notes}</Text>}
           {selectedTask.due && <Text>📅 Vence: {new Date(selectedTask.due).toLocaleString()}</Text>}
+        </Box>
+      )}
+
+      {mode === "detail" && selectedTask && breakpoint !== "small" && breakpoint !== "tiny" && (
+        <Box flexDirection="column" borderStyle="bold" borderColor="cyan" padding={1} marginTop={1} height={DETAIL_ROWS} overflow="hidden">
+          <Text bold color="cyan">{selectedTask.title}</Text>
+          {selectedTask.notes && <Text>{selectedTask.notes}</Text>}
+          {selectedTask.due && <Text>📅 Vence: {new Date(selectedTask.due).toLocaleString()}</Text>}
+          <Text dimColor>Esc para volver</Text>
         </Box>
       )}
 
