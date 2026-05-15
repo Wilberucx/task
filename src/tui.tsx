@@ -85,10 +85,22 @@ const App = () => {
   const [editFocus, setEditFocus] = useState<"title" | "notes">("title");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   const { stdout } = useStdout();
   const [cols, setCols] = useState(stdout.columns);
   const [rows, setRows] = useState(stdout.rows);
+
+  const currentList = groups[activeListIndex];
+  const currentTasks = currentList?.tasks ?? [];
+
+  const visibleTasks = useMemo(() => flattenVisible(currentTasks, collapsed), [currentTasks, collapsed]);
+
+  const selectedTask = visibleTasks[activeTaskIndex];
+
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [selectedTask, mode]);
 
   useEffect(() => {
     let shouldUpdate = true;
@@ -105,16 +117,12 @@ const App = () => {
     };
   }, [stdout]);
 
-  const currentList = groups[activeListIndex];
-  const currentTasks = currentList?.tasks ?? [];
-
-  const visibleTasks = useMemo(() => flattenVisible(currentTasks, collapsed), [currentTasks, collapsed]);
-
-  const selectedTask = visibleTasks[activeTaskIndex];
-
   const breakpoint = getBreakpoint(cols);
   const headerH = HEADER_ROWS[breakpoint];
-  const detailH = Math.max(3, Math.floor(rows * 0.25));
+  
+  // Height adaptivity: prioritize height if taller than wide
+  const detailH = rows > cols ? Math.floor(rows * 0.4) : Math.max(3, Math.floor(rows * 0.25));
+  
   const listH = rows - headerH - TABS_ROWS - STATUS_ROWS - (mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "tiny" ? detailH : 0);
 
   const initCollapsed = (nodes: TaskNode[]) => {
@@ -362,6 +370,8 @@ const App = () => {
         setMode("normal");
         return;
       }
+      if (input === "j") setScrollOffset((o) => o + 1);
+      if (input === "k") setScrollOffset((o) => Math.max(0, o - 1));
       return;
     }
 
@@ -517,9 +527,15 @@ const App = () => {
       {mode === "detail" && selectedTask && (
         <Box flexDirection="column" borderStyle="bold" borderColor="cyan" paddingX={1} marginTop={1} height={detailH} overflow="hidden">
           <Text bold color="cyan">{selectedTask.title}</Text>
-          {selectedTask.notes && <Box marginTop={1}><Text>{selectedTask.notes}</Text></Box>}
-          {selectedTask.due && <Text dimColor>📅 Vence: {new Date(selectedTask.due).toLocaleString()}</Text>}
-          <Box marginTop={1}><Text dimColor>Esc para volver</Text></Box>
+          <Box flexDirection="column" marginTop={1} overflow="hidden">
+             {(selectedTask.notes || "").split("\n").slice(scrollOffset).map((line, i) => (
+               <Text key={i}>{line}</Text>
+             ))}
+          </Box>
+          <Box marginTop={1} flexDirection="row" justifyContent="space-between">
+            <Text dimColor>Esc: Volver • j/k: Scroll</Text>
+            {selectedTask.due && <Text dimColor>📅 {new Date(selectedTask.due).toLocaleString()}</Text>}
+          </Box>
         </Box>
       )}
 
