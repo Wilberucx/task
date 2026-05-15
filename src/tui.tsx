@@ -86,6 +86,7 @@ const App = () => {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [helpVisible, setHelpVisible] = useState(false);
 
   const { stdout } = useStdout();
   const [cols, setCols] = useState(stdout.columns);
@@ -118,12 +119,13 @@ const App = () => {
   }, [stdout]);
 
   const breakpoint = getBreakpoint(cols);
-  const headerH = HEADER_ROWS[breakpoint];
-  
-  // Height adaptivity: prioritize height if taller than wide
-  const detailH = rows > cols ? Math.floor(rows * 0.4) : Math.max(3, Math.floor(rows * 0.25));
-  
+  const headerH = helpVisible ? HEADER_ROWS[breakpoint] : 0;
+
+  // Height adaptivity: prioritize height if taller than wide (50% if tall)
+  const detailH = rows > cols ? Math.floor(rows * 0.5) : Math.max(4, Math.floor(rows * 0.35));
+
   const listH = rows - headerH - TABS_ROWS - STATUS_ROWS - (mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "tiny" ? detailH : 0);
+
 
   const initCollapsed = (nodes: TaskNode[]) => {
     const ids = collectIdsWithChildren(nodes);
@@ -447,6 +449,9 @@ const App = () => {
       case "e":
         handleEditStart();
         break;
+      case "?":
+        setHelpVisible(!helpVisible);
+        break;
       case "r":
         refreshTasks();
         break;
@@ -471,7 +476,12 @@ const App = () => {
             <Text bold color="cyan">TASK </Text>
             <Text dimColor>| {currentList?.listTitle}</Text>
           </Box>
-          <Text dimColor>j/k: tasks • spc: done • ret: detail • d/e/a/r/q</Text>
+          {helpVisible && (
+            <Text dimColor>j/k: tasks • spc: done • ret: detail • d/e/a/r/q • ?: hide</Text>
+          )}
+          {!helpVisible && (
+            <Text dimColor>?: show help</Text>
+          )}
         </Box>
       )}
 
