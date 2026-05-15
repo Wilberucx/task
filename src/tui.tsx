@@ -487,14 +487,19 @@ const App = () => {
             const titleMaxWidth = cols - (isChild ? 8 : 6) - dateStr.length;
             
             return (
-              <Box key={task.id} paddingX={1}>
-                <Text color={idx === activeTaskIndex ? "green" : "white"} bold={idx === activeTaskIndex}>
+              <Box key={task.id} paddingX={1} flexDirection="row">
+                <Text color={idx === activeTaskIndex ? "green" : "white"}>
                   {idx === activeTaskIndex ? "▶ " : "  "}
-                  {isChild ? "  " : ""}
-                  {truncate(task.title, titleMaxWidth)}
-                  {hasChildren && (isCollapsed ? " ▸" : " ▾")}
+                  {task.status === "completed" ? "▣ " : "▢ "}
                 </Text>
-                {dateStr && <Text dimColor>{dateStr}</Text>}
+                <Box flexDirection="column" flexShrink={1}>
+                  <Text color={idx === activeTaskIndex ? "green" : "white"} bold={idx === activeTaskIndex}>
+                    {isChild ? "  " : ""}
+                    {task.title}
+                    {hasChildren && (isCollapsed ? " ▸" : " ▾")}
+                  </Text>
+                  {dateStr && <Text dimColor>{dateStr}</Text>}
+                </Box>
               </Box>
             );
           })
