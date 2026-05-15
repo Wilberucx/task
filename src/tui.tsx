@@ -4,6 +4,12 @@ import { render, Box, Text, useInput, useStdout } from "ink";
 import { GwsTaskRepository } from "./infrastructure/gws/GwsTaskRepository.js";
 import { TaskService } from "./application/TaskService.js";
 import type { GroupedTasks } from "./application/TaskService.js";
+import fs from "fs";
+import path from "path";
+import os from "os";
+
+const CACHE_DIR = path.join(os.homedir(), ".cache", "task-cli");
+const CACHE_FILE = path.join(CACHE_DIR, "last_tasks.json");
 
 const repo = new GwsTaskRepository();
 const service = new TaskService(repo);
@@ -133,6 +139,14 @@ const App = () => {
   };
 
   useEffect(() => {
+    if (fs.existsSync(CACHE_FILE)) {
+      try {
+        const cachedData = JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
+        setGroups(cachedData);
+      } catch (e) {
+        // Ignorar errores de lectura de caché
+      }
+    }
     refreshTasks();
   }, []);
 
@@ -145,10 +159,18 @@ const App = () => {
   const refreshTasks = async () => {
     try {
       const g = await service.getAllTasks();
-      setGroups(g);
+      
+      // Solo actualizar si hay cambios (JSON string comparison para simplificar)
+      if (JSON.stringify(g) !== JSON.stringify(groups)) {
+        setGroups(g);
+        
+        // Guardar en caché
+        if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+        fs.writeFileSync(CACHE_FILE, JSON.stringify(g));
+      }
+
       if (activeListIndex >= g.length) {
         setActiveListIndex(0);
-        setActiveTaskIndex(0);
       }
       if (g[activeListIndex]) {
         initCollapsed(g[activeListIndex].tasks);
