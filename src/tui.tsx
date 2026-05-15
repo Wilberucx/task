@@ -526,8 +526,7 @@ const App = () => {
 
       {mode === "detail" && selectedTask && (
         <Box flexDirection="column" borderStyle="bold" borderColor="cyan" paddingX={1} marginTop={1} height={detailH} overflow="hidden">
-          <Text bold color="cyan">{selectedTask.title}</Text>
-          <Box flexDirection="column" marginTop={1} overflow="hidden">
+          <Box flexDirection="column" overflow="hidden">
              {(selectedTask.notes || "").split("\n").slice(scrollOffset).map((line, i) => (
                <Text key={i}>{line}</Text>
              ))}
