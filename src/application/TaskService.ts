@@ -80,8 +80,9 @@ export class TaskService {
     taskListId: string,
     title: string,
     notes?: string,
+    parent?: string,
   ): Promise<Task> {
-    const task = await this.repository.create(taskListId, title, notes);
+    const task = await this.repository.create(taskListId, title, notes, parent);
     this.invalidate();
     return task;
   }
@@ -91,8 +92,9 @@ export class TaskService {
     taskId: string,
     title: string,
     notes?: string,
+    parent?: string,
   ): Promise<Task> {
-    const task = await this.repository.update(taskListId, taskId, title, notes);
+    const task = await this.repository.update(taskListId, taskId, title, notes, parent);
     this.invalidate();
     return task;
   }

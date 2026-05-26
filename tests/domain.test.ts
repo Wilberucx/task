@@ -70,7 +70,7 @@ describe("TaskService", () => {
 
       const result = await service.createTask("list1", "New Task");
 
-      expect(mockRepo.create).toHaveBeenCalledWith("list1", "New Task", undefined);
+      expect(mockRepo.create).toHaveBeenCalledWith("list1", "New Task", undefined, undefined);
       expect(result).toEqual(mockTask);
     });
 
@@ -79,7 +79,7 @@ describe("TaskService", () => {
 
       await service.createTask("list1", "Task", "some notes");
 
-      expect(mockRepo.create).toHaveBeenCalledWith("list1", "Task", "some notes");
+      expect(mockRepo.create).toHaveBeenCalledWith("list1", "Task", "some notes", undefined);
     });
   });
 
@@ -201,32 +201,32 @@ describe("TaskService", () => {
   });
 
   describe("updateTask", () => {
-    it("delegates title and notes to the repository", async () => {
+    it("delegates title, notes, and parent to the repository", async () => {
       const mockTask = { id: "t1", title: "Updated", status: "needsAction", notes: "notes", taskListId: "l1" };
       mockRepo.update = vi.fn().mockResolvedValue(mockTask);
 
-      const result = await service.updateTask("l1", "t1", "Updated", "notes");
+      const result = await service.updateTask("l1", "t1", "Updated", "notes", "parent1");
 
-      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "notes");
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "notes", "parent1");
       expect(result).toEqual(mockTask);
     });
 
-    it("delegates only title when notes is undefined", async () => {
+    it("delegates only title when notes and parent are undefined", async () => {
       const mockTask = { id: "t1", title: "Updated", status: "needsAction", taskListId: "l1" };
       mockRepo.update = vi.fn().mockResolvedValue(mockTask);
 
       await service.updateTask("l1", "t1", "Updated");
 
-      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", undefined);
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", undefined, undefined);
     });
 
-    it("passes empty string notes to repository", async () => {
+    it("passes empty string notes and parent to repository", async () => {
       const mockTask = { id: "t1", title: "Updated", status: "needsAction", taskListId: "l1" };
       mockRepo.update = vi.fn().mockResolvedValue(mockTask);
 
-      await service.updateTask("l1", "t1", "Updated", "");
+      await service.updateTask("l1", "t1", "Updated", "", "");
 
-      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "");
+      expect(mockRepo.update).toHaveBeenCalledWith("l1", "t1", "Updated", "", "");
     });
   });
 });

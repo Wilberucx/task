@@ -68,7 +68,11 @@ export class GwsTaskRepository implements TaskRepository {
     taskListId: string,
     title: string,
     notes?: string,
+    parent?: string,
   ): Promise<Task> {
+    const params: Record<string, string> = { tasklist: taskListId };
+    if (parent) params.parent = parent;
+
     const body: Record<string, string> = { title };
     if (notes) body.notes = notes;
 
@@ -77,7 +81,7 @@ export class GwsTaskRepository implements TaskRepository {
       "tasks",
       "insert",
       "--params",
-      JSON.stringify({ tasklist: taskListId }),
+      JSON.stringify(params),
       "--json",
       JSON.stringify(body),
     ]);
@@ -94,7 +98,9 @@ export class GwsTaskRepository implements TaskRepository {
     taskId: string,
     title: string,
     notes?: string,
+    parent?: string,
   ): Promise<Task> {
+    // Always patch title/notes (parent is NOT a valid body field for patch)
     const body: Record<string, string> = { title };
     if (notes !== undefined) body.notes = notes;
 
@@ -110,6 +116,28 @@ export class GwsTaskRepository implements TaskRepository {
 
     if (!raw || !raw.id) {
       throw new Error("Failed to update task");
+    }
+
+    // If parent was explicitly provided, use `move` to change the parent
+    // (parent is a query parameter for move, not a body field for patch)
+    if (parent !== undefined) {
+      const moveParams: Record<string, string> = {
+        tasklist: taskListId,
+        task: taskId,
+        parent, // "" → root, "taskId" → child
+      };
+
+      const moved = await this.runner.run<RawTask>([
+        "tasks",
+        "tasks",
+        "move",
+        "--params",
+        JSON.stringify(moveParams),
+      ]);
+
+      if (moved) {
+        return { id: moved.id, title: moved.title, status: moved.status, notes: moved.notes, taskListId };
+      }
     }
 
     return { id: raw.id, title: raw.title, status: raw.status, notes: raw.notes, taskListId };
