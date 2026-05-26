@@ -75,7 +75,6 @@ function calcLines(text: string, maxWidth: number): number {
   return total;
 }
 
-const HEADER_ROWS = { large: 1, medium: 1, small: 1, tiny: 0 };
 const TABS_ROWS = 2;
 const STATUS_ROWS = 3;
 
@@ -142,12 +141,11 @@ const App = () => {
   const maxBoxH = Math.max(3, Math.min(Math.floor(rows * 0.3), 12));
 
   const breakpoint = getBreakpoint(cols);
-  const headerH = helpVisible ? HEADER_ROWS[breakpoint] : 0;
 
   // Portrait mode: no detail preview to maximize task list space
   const detailH = rows > cols ? 0 : Math.max(4, Math.floor(rows * 0.35));
 
-  const listH = rows - headerH - TABS_ROWS - STATUS_ROWS - (mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "tiny" ? detailH : 0);
+  const listH = rows - TABS_ROWS - STATUS_ROWS - (mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "tiny" ? detailH : 0);
 
 
   const initCollapsed = (nodes: TaskNode[]) => {
@@ -347,6 +345,14 @@ const App = () => {
         return;
       }
 
+      if (key.shift && key.tab) {
+        setCreateFocus((f) => {
+          const order: CreateFocus[] = ["title", "notes", "subtasks"];
+          return order[(order.indexOf(f) - 1 + order.length) % order.length];
+        });
+        return;
+      }
+
       if (key.tab) {
         setCreateFocus((f) => {
           const order: CreateFocus[] = ["title", "notes", "subtasks"];
@@ -406,6 +412,14 @@ const App = () => {
         return;
       }
 
+      if (key.shift && key.tab) {
+        setEditFocus((f) => {
+          const order: EditFocus[] = ["title", "notes", "subtasks"];
+          return order[(order.indexOf(f) - 1 + order.length) % order.length];
+        });
+        return;
+      }
+
       if (key.tab) {
         setEditFocus((f) => {
           const order: EditFocus[] = ["title", "notes", "subtasks"];
@@ -453,6 +467,22 @@ const App = () => {
         }
       }
       return;
+    }
+
+    // If help is visible, dismiss on any action key
+    if (helpVisible) {
+      if (input === "?") {
+        setHelpVisible(false);
+        return;
+      }
+      if (key.escape) {
+        setHelpVisible(false);
+        return;
+      }
+      if (input || key.return || key.tab || (key.shift && key.tab)) {
+        setHelpVisible(false);
+        // fall through to process the action
+      }
     }
 
     if (mode === "detail") {
@@ -742,17 +772,11 @@ const App = () => {
   return (
     <Box flexDirection="column" height={rows - 2}>
       {breakpoint !== "tiny" && (
-        <Box flexDirection="row" justifyContent="space-between" paddingX={1} height={1} marginBottom={1}>
+        <Box flexDirection="row" paddingX={1} height={1} marginBottom={1}>
           <Box>
             <Text bold color="cyan">TASK </Text>
             <Text dimColor>| {currentList?.listTitle}</Text>
           </Box>
-          {helpVisible && (
-            <Text dimColor>j/k: tasks • spc: done • ret: detail • d/e/a/r/q • ?: hide</Text>
-          )}
-          {!helpVisible && (
-            <Text dimColor>?: show help</Text>
-          )}
         </Box>
       )}
 
@@ -824,11 +848,49 @@ const App = () => {
         </Box>
       )}
 
-      <Box marginTop={1}>
+      <Box marginTop={1} flexDirection="row" justifyContent="space-between">
         <Text dimColor>
           {`[${activeListIndex + 1}/${groups.length}] ${visibleTasks.length > 0 ? `[${activeTaskIndex + 1}/${visibleTasks.length}]` : ""}`}
         </Text>
+        {!helpVisible && <Text dimColor>?: help</Text>}
+        {helpVisible && <Text dimColor>?: / Esc: close</Text>}
       </Box>
+
+      {helpVisible && (
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={2}
+          paddingY={1}
+          marginTop={1}
+          height={Math.min(16, Math.floor((rows - 2) / 2))}
+          overflow="hidden"
+        >
+          <Box justifyContent="center" marginBottom={1}>
+            <Text bold color="cyan">HELP</Text>
+          </Box>
+          <Box flexDirection="row">
+            <Box flexDirection="column" marginRight={4}>
+              <Text bold color="gray">Navigation</Text>
+              <Text>  j/k    Move tasks</Text>
+              <Text>  g/G    Top / Bottom</Text>
+              <Text>  Tab    Switch list</Text>
+              <Text>  h/l    Collapse / Expand</Text>
+              <Text>  Enter  View details</Text>
+            </Box>
+            <Box flexDirection="column">
+              <Text bold color="gray">Actions</Text>
+              <Text>  Space  Toggle done</Text>
+              <Text>  d      Delete task</Text>
+              <Text>  e      Edit task</Text>
+              <Text>  a / :  New task</Text>
+              <Text>  r      Refresh</Text>
+              <Text>  q      Quit</Text>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 };
