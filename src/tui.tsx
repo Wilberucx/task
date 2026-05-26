@@ -39,7 +39,7 @@ interface Task {
 
 type Mode = "normal" | "create" | "edit" | "detail";
 type CreateFocus = "title" | "notes" | "subtasks";
-type EditFocus = "title" | "notes" | "parent";
+type EditFocus = "title" | "notes" | "subtasks";
 
 function collectIdsWithChildren(nodes: TaskNode[]): string[] {
   const ids: string[] = [];
@@ -61,10 +61,6 @@ function flattenVisible(nodes: TaskNode[], collapsed: Set<string>): TaskNode[] {
   return result;
 }
 
-function truncate(text: string, maxWidth: number): string {
-  if (text.length <= maxWidth) return text;
-  return text.slice(0, maxWidth - 1) + "…";
-}
 
 function calcLines(text: string, maxWidth: number): number {
   if (!text) return 1;
@@ -92,7 +88,6 @@ function getBreakpoint(cols: number): Breakpoint {
   return "tiny";
 }
 
-const MAX_VISIBLE_PARENTS = 5;
 
 const App = () => {
   const [groups, setGroups] = useState<GroupedTasks[]>([]);
@@ -106,10 +101,9 @@ const App = () => {
   const [createSubtasks, setCreateSubtasks] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editSubtasks, setEditSubtasks] = useState("");
   const [editFocus, setEditFocus] = useState<EditFocus>("title");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editParentIndex, setEditParentIndex] = useState(0);
-  const [editParentScroll, setEditParentScroll] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [scrollOffset, setScrollOffset] = useState(0);
   const [helpVisible, setHelpVisible] = useState(false);
@@ -155,14 +149,6 @@ const App = () => {
 
   const listH = rows - headerH - TABS_ROWS - STATUS_ROWS - (mode !== "detail" && selectedTask && (selectedTask.notes || selectedTask.due) && breakpoint !== "tiny" ? detailH : 0);
 
-  // Parent candidates for edit modal: "Root task" + all visible tasks except the one being edited
-  const editParentCandidates = useMemo(() => {
-    if (!editingTaskId) return [{ id: "" as string, title: "Root task" }];
-    const tasks = visibleTasks
-      .filter(t => t.id !== editingTaskId)
-      .map(t => ({ id: t.id, title: t.title }));
-    return [{ id: "" as string, title: "Root task" }, ...tasks];
-  }, [visibleTasks, editingTaskId]);
 
   const initCollapsed = (nodes: TaskNode[]) => {
     const ids = collectIdsWithChildren(nodes);
@@ -299,26 +285,20 @@ const App = () => {
     setEditingTaskId(selectedTask.id);
     setEditTitle(selectedTask.title);
     setEditNotes(selectedTask.notes || "");
+    setEditSubtasks("");
     setEditFocus("title");
-    // Find current parent in candidates
-    if (selectedTask.parent) {
-      const idx = visibleTasks.findIndex(t => t.id === selectedTask.parent);
-      if (idx >= 0) {
-        setEditParentIndex(idx + 1); // +1 because index 0 is "Root task"
-      } else {
-        setEditParentIndex(0);
-      }
-    } else {
-      setEditParentIndex(0);
-    }
-    setEditParentScroll(0);
     setMode("edit");
   };
 
   const handleEdit = async () => {
     if (!editingTaskId || !currentList || !editTitle.trim()) return;
     const listId = currentList.listId;
-    const newParent = editParentCandidates[editParentIndex]?.id;
+
+    // Parse subtask lines
+    const subtaskLines = editSubtasks
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0);
 
     setGroups(groups.map(g => {
       if (g.listId !== listId) return g;
@@ -327,8 +307,7 @@ const App = () => {
         tasks: g.tasks.map(t => t.id === editingTaskId ? {
           ...t,
           title: editTitle.trim(),
-          notes: editNotes.trim() || undefined,
-          parent: newParent
+          notes: editNotes.trim() || undefined
         } : t)
       };
     }));
@@ -337,9 +316,20 @@ const App = () => {
     setEditingTaskId(null);
     setEditTitle("");
     setEditNotes("");
+    setEditSubtasks("");
 
     try {
-      await service.updateTask(listId, editingTaskId, editTitle.trim(), editNotes.trim() || undefined, newParent);
+      await service.updateTask(listId, editingTaskId, editTitle.trim(), editNotes.trim() || undefined);
+
+      // Create subtasks under the edited task
+      if (subtaskLines.length > 0 && editingTaskId) {
+        await Promise.all(
+          subtaskLines.map(title =>
+            service.createTask(listId, title, undefined, editingTaskId)
+          )
+        );
+      }
+
       refreshTasks();
     } catch {
       setMessage("Error updating");
@@ -408,12 +398,13 @@ const App = () => {
         setEditingTaskId(null);
         setEditTitle("");
         setEditNotes("");
+        setEditSubtasks("");
         return;
       }
 
       if (key.tab) {
         setEditFocus((f) => {
-          const order: EditFocus[] = ["title", "notes", "parent"];
+          const order: EditFocus[] = ["title", "notes", "subtasks"];
           return order[(order.indexOf(f) + 1) % order.length];
         });
         return;
@@ -424,30 +415,9 @@ const App = () => {
         return;
       }
 
-      // En el campo parent: up/down navegan la lista de candidatos
-      if (editFocus === "parent") {
-        if (key.upArrow) {
-          const newIdx = Math.max(0, editParentIndex - 1);
-          setEditParentIndex(newIdx);
-          if (newIdx <= editParentScroll) {
-            setEditParentScroll((s) => Math.max(0, s - 1));
-          }
-          return;
-        }
-        if (key.downArrow) {
-          const newIdx = Math.min(editParentCandidates.length - 1, editParentIndex + 1);
-          setEditParentIndex(newIdx);
-          if (newIdx >= editParentScroll + MAX_VISIBLE_PARENTS - 1) {
-            setEditParentScroll((s) => Math.min(editParentCandidates.length - MAX_VISIBLE_PARENTS, s + 1));
-          }
-          return;
-        }
-        return;
-      }
-
       if (key.upArrow || key.downArrow) {
         setEditFocus((f) => {
-          const order: EditFocus[] = ["title", "notes", "parent"];
+          const order: EditFocus[] = ["title", "notes", "subtasks"];
           return order[(order.indexOf(f) + (key.upArrow ? -1 : 1) + order.length) % order.length];
         });
         return;
@@ -456,8 +426,10 @@ const App = () => {
       if (key.backspace) {
         if (editFocus === "title") {
           setEditTitle((t) => t.slice(0, -1));
-        } else {
+        } else if (editFocus === "notes") {
           setEditNotes((n) => n.slice(0, -1));
+        } else {
+          setEditSubtasks((s) => s.slice(0, -1));
         }
         return;
       }
@@ -465,8 +437,10 @@ const App = () => {
       if (input) {
         if (editFocus === "title") {
           setEditTitle((t) => t + input);
-        } else {
+        } else if (editFocus === "notes") {
           setEditNotes((n) => n + input);
+        } else {
+          setEditSubtasks((s) => s + input);
         }
       }
       return;
@@ -663,15 +637,11 @@ const App = () => {
     );
   }
 
-  // ─── Full-screen edit modal (with parent/subtask selection) ─────────
+  // ─── Full-screen edit modal (same boxes as create) ───────────────────
   if (mode === "edit") {
     const editTitleBoxH = Math.min(calcLines(editTitle, textWidth) + 2, maxBoxH);
     const editNotesBoxH = Math.min(calcLines(editNotes, textWidth) + 2, maxBoxH);
-    const parentListHeight = Math.min(MAX_VISIBLE_PARENTS, editParentCandidates.length) + 2;
-    const visibleCandidates = editParentCandidates.slice(
-      editParentScroll,
-      editParentScroll + MAX_VISIBLE_PARENTS
-    );
+    const editSubtasksBoxH = Math.min(calcLines(editSubtasks, textWidth) + 2, maxBoxH);
 
     return (
       <Box flexDirection="column" height={rows - 2} paddingX={2} paddingY={1}>
@@ -721,41 +691,21 @@ const App = () => {
         </Box>
 
         <Box flexDirection="column" marginBottom={1}>
-          <Text bold color={editFocus === "parent" ? "yellow" : "gray"}>
-            {editFocus === "parent" ? "▸ " : "  "}PARENT / SUBTASK
+          <Text bold color={editFocus === "subtasks" ? "yellow" : "gray"}>
+            {editFocus === "subtasks" ? "▸ " : "  "}SUBTASKS
+            <Text dimColor> (one per line)</Text>
           </Text>
           <Box
             borderStyle="round"
-            borderColor={editFocus === "parent" ? "yellow" : "gray"}
+            borderColor={editFocus === "subtasks" ? "yellow" : "gray"}
             paddingX={1}
-            height={parentListHeight}
-            flexDirection="column"
+            height={editSubtasksBoxH}
           >
-            {visibleCandidates.length === 0 ? (
-              <Text dimColor>No tasks available</Text>
-            ) : (
-              visibleCandidates.map((candidate, idx) => {
-                const actualIdx = editParentScroll + idx;
-                const isSelected = actualIdx === editParentIndex;
-                // Show indent for actual tasks (not "Tarea raíz")
-                const isRoot = candidate.id === undefined;
-                return (
-                  <Box key={candidate.id || "root"} height={1}>
-                    <Text color={isSelected ? "yellow" : "white"}>
-                      {isSelected ? "▸ " : "  "}
-                      {isSelected ? "● " : "○ "}
-                      {isRoot ? candidate.title : truncate(candidate.title, cols - 14)}
-                    </Text>
-                  </Box>
-                );
-              })
-            )}
-          </Box>
-          {editParentCandidates.length > MAX_VISIBLE_PARENTS && (
-            <Text dimColor>
-              {editParentScroll + 1}-{Math.min(editParentScroll + MAX_VISIBLE_PARENTS, editParentCandidates.length)} of {editParentCandidates.length}
+            <Text wrap="wrap">
+              {editSubtasks || (editFocus === "subtasks" ? "" : <Text dimColor>(optional)</Text>)}
+              {editFocus === "subtasks" && <Text color="yellow">▌</Text>}
             </Text>
-          )}
+          </Box>
         </Box>
 
         {message && (
@@ -768,7 +718,7 @@ const App = () => {
 
         <Box justifyContent="center" marginBottom={1}>
           <Text dimColor>
-            Enter: Save  •  Tab/↑↓: Field  •  ↑↓ Parent: Navigate  •  Esc: Cancel
+            Enter: Save  •  Tab/↑↓: Field  •  Esc: Cancel
           </Text>
         </Box>
       </Box>
