@@ -355,8 +355,12 @@ const App = () => {
         return;
       }
 
-      // Enter creates the task
+      // Enter creates the task (newline in subtasks field)
       if (key.return) {
+        if (createFocus === "subtasks") {
+          setCreateSubtasks((s) => s + "\n");
+          return;
+        }
         handleCreate();
         return;
       }
@@ -410,7 +414,12 @@ const App = () => {
         return;
       }
 
+      // Enter saves the task (newline in subtasks field)
       if (key.return) {
+        if (editFocus === "subtasks") {
+          setEditSubtasks((s) => s + "\n");
+          return;
+        }
         handleEdit();
         return;
       }
@@ -605,7 +614,7 @@ const App = () => {
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color={createFocus === "subtasks" ? "green" : "gray"}>
             {createFocus === "subtasks" ? "▸ " : "  "}SUBTASKS
-            <Text dimColor> (one per line)</Text>
+            <Text dimColor> (Enter for new line)</Text>
           </Text>
           <Box
             borderStyle="round"
@@ -630,7 +639,9 @@ const App = () => {
 
         <Box justifyContent="center" marginBottom={1}>
           <Text dimColor>
-            Enter: Create  •  Tab/↑↓: Field  •  Esc: Cancel
+            {createFocus === "subtasks"
+              ? "Enter: New Line  •  Tab/↑↓: Field  •  Esc: Cancel"
+              : "Enter: Create  •  Tab/↑↓: Field  •  Esc: Cancel"}
           </Text>
         </Box>
       </Box>
@@ -693,7 +704,7 @@ const App = () => {
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color={editFocus === "subtasks" ? "yellow" : "gray"}>
             {editFocus === "subtasks" ? "▸ " : "  "}SUBTASKS
-            <Text dimColor> (one per line)</Text>
+            <Text dimColor> (Enter for new line)</Text>
           </Text>
           <Box
             borderStyle="round"
@@ -718,7 +729,9 @@ const App = () => {
 
         <Box justifyContent="center" marginBottom={1}>
           <Text dimColor>
-            Enter: Save  •  Tab/↑↓: Field  •  Esc: Cancel
+            {editFocus === "subtasks"
+              ? "Enter: New Line  •  Tab/↑↓: Field  •  Esc: Cancel"
+              : "Enter: Save  •  Tab/↑↓: Field  •  Esc: Cancel"}
           </Text>
         </Box>
       </Box>
